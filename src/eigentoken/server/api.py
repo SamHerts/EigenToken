@@ -683,7 +683,9 @@ def build_router(registry: ModelRegistry) -> APIRouter:
     return r
 
 
-def create_app(registry: ModelRegistry, cors_origins: Optional[list] = None) -> FastAPI:
+def create_app(
+    registry: ModelRegistry, cors_origins: Optional[list] = None, serve_ui: bool = True
+) -> FastAPI:
     app = FastAPI(title="eigentoken", docs_url="/api/docs", redoc_url=None)
     if cors_origins:
         # Lets a copy of the UI hosted elsewhere (GitHub Pages) call this server.
@@ -696,6 +698,13 @@ def create_app(registry: ModelRegistry, cors_origins: Optional[list] = None) -> 
             allow_headers=["Content-Type"],
         )
     app.include_router(build_router(registry))
-    if WEB_DIR.is_dir():
+    if not serve_ui:
+        # API only: the interface is hosted elsewhere (GitHub Pages). The root still
+        # answers, so a browser or a host's health check finds something there.
+        @app.get("/", include_in_schema=False)
+        def root():
+            return {"service": "eigentoken API", "health": "/api/health",
+                    "docs": "/api/docs"}
+    elif WEB_DIR.is_dir():
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
     return app

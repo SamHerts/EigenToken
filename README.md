@@ -101,6 +101,8 @@ eigentoken serve --host 0.0.0.0 --port 8077 \
 - `--allow` (or `--allow-file`) restricts users to a fixed model list. Without
   it, any visitor can make the server download any model on the hub — fine on a
   workstation, not on a shared box.
+- `--api-only` serves the API without the web interface, for a server that
+  sits behind a copy of the UI hosted elsewhere; pair it with `--cors-origin`.
 - Without `--allow`, load limits keep "any model" from becoming "any
   amount of disk, bandwidth and memory". They are on by default; 0 turns a
   numeric one off:

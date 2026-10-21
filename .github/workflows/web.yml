@@ -3,9 +3,10 @@
 # The site is then at https://<user>.github.io/<repo>/ (the page uses relative paths,
 # so it works at any sub-path). Pull requests are checked but not deployed.
 #
-# Pages hosts only the interface. The analyses run in a Python server, so the hosted
-# page talks to one given with ?api=URL, which must be started with
-# --cors-origin https://<user>.github.io.
+# Pages hosts only the interface. The analyses run in a Python server: the Raspberry
+# Pi set up by deploy/pi, unless the repo variable EIGENTOKEN_API names another.
+# That server must be started with --cors-origin https://<user>.github.io.
+# A visitor can still pick a different one with ?api=URL.
 name: Web app
 
 on:
@@ -30,9 +31,18 @@ jobs:
       # The render tests need a live server with a model loaded, so CI only checks
       # that the script parses.
       - run: node --check src/eigentoken/web/app.js
+      # The page served by `eigentoken serve` leaves the API address empty (same
+      # origin); the Pages copy gets the server's address written in.
+      - name: Point the page at the API server
+        env:
+          API: ${{ vars.EIGENTOKEN_API || 'https://eigentoken-api.samuelherts.com' }}
+        run: |
+          cp -r src/eigentoken/web _site
+          sed -i "s|<meta name=\"eigentoken-api\" content=\"\">|<meta name=\"eigentoken-api\" content=\"$API\">|" _site/index.html
+          grep -F "content=\"$API\"" _site/index.html
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: src/eigentoken/web
+          path: _site
 
   deploy:
     if: github.event_name != 'pull_request'

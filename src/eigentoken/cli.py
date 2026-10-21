@@ -1070,6 +1070,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="let pages on these origins call the API, e.g. the GitHub "
                         "Pages copy of the UI: https://USER.github.io "
                         "($EIGENTOKEN_CORS, space separated)")
+    q.add_argument("--api-only", action="store_true",
+                   help="serve the API without the web interface, for a server "
+                        "behind a copy of the UI hosted elsewhere")
     q.set_defaults(func=cmd_serve)
 
     return p
@@ -1189,7 +1192,7 @@ def cmd_serve(args) -> None:
     sock = bind_socket(args.host, args.port)
     port = sock.getsockname()[1]
 
-    app = create_app(registry, cors_origins=args.cors_origin)
+    app = create_app(registry, cors_origins=args.cors_origin, serve_ui=not args.api_only)
     shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0", "::") else args.host
     # stdout is block-buffered when redirected to a file or a pipe, and
     # uvicorn logs to stderr; without a flush the URL surfaces after the

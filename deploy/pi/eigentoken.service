@@ -1,0 +1,33 @@
+# The EigenToken API on the Raspberry Pi, behind a Cloudflare tunnel
+# (cloudflared, on the same machine, forwards to 127.0.0.1:8077). The interface
+# is on GitHub Pages, so this serves the API only and lets that origin call it.
+# Install: deploy/pi/install.sh
+[Unit]
+Description=EigenToken API server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=samherts
+WorkingDirectory=/home/samherts/eigentoken
+Environment=HF_HOME=/home/samherts/eigentoken-models/hf
+# Bound to localhost: only the tunnel reaches it, and the per-visitor load limit
+# reads the real address from the X-Forwarded-For that cloudflared passes on.
+ExecStart=/home/samherts/eigentoken/.venv/bin/eigentoken serve \
+  --host 127.0.0.1 --port 8077 --api-only \
+  --cors-origin https://samherts.github.io \
+  --max-models 4 --max-memory-gb 1.5 \
+  --cache-dir /home/samherts/eigentoken-models --max-disk-gb 8 \
+  --preload gpt2:center \
+  --allow gpt2 gpt2-medium distilgpt2 EleutherAI/pythia-160m bert-base-uncased
+Restart=on-failure
+RestartSec=10
+# 4 GB of RAM: stop a runaway request before the kernel starts killing others.
+MemoryMax=3G
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/samherts/eigentoken-models
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
