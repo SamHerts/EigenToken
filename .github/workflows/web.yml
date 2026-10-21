@@ -1,11 +1,12 @@
 # Publishes the web UI (src/eigentoken/web) to GitHub Pages on every push to main.
 # One-time setup: repo Settings → Pages → Source: "GitHub Actions".
-# The site is then at https://<user>.github.io/<repo>/ (the page uses relative paths,
-# so it works at any sub-path). Pull requests are checked but not deployed.
+# The site is then at https://<user>.github.io/<repo>/, or at the custom domain set
+# there (https://eigentoken.samuelherts.com); the page uses relative paths, so it
+# works at any sub-path. Pull requests are checked but not deployed.
 #
 # Pages hosts only the interface. The analyses run in a Python server: the Raspberry
 # Pi set up by deploy/pi, unless the repo variable EIGENTOKEN_API names another.
-# That server must be started with --cors-origin https://<user>.github.io.
+# That server must allow the site's origin with --cors-origin (deploy/pi does).
 # A visitor can still pick a different one with ?api=URL.
 name: Web app
 

@@ -15,7 +15,7 @@ Environment=HF_HOME=/home/samherts/eigentoken-models/hf
 # reads the real address from the X-Forwarded-For that cloudflared passes on.
 ExecStart=/home/samherts/eigentoken/.venv/bin/eigentoken serve \
   --host 127.0.0.1 --port 8077 --api-only \
-  --cors-origin https://samherts.github.io \
+  --cors-origin https://eigentoken.samuelherts.com https://samherts.github.io \
   --max-models 4 --max-memory-gb 1.5 \
   --cache-dir /home/samherts/eigentoken-models --max-disk-gb 8 \
   --preload gpt2:center \
