@@ -1,0 +1,37 @@
+# A small probe set spanning several relation types.
+# Royalty / gender
+king
+queen
+man
+woman
+prince
+princess
+# Countries and capitals
+france
+paris
+japan
+tokyo
+germany
+berlin
+# Animals
+dog
+cat
+horse
+mouse
+lion
+# Numbers
+one
+two
+three
+seven
+# Colours
+red
+blue
+green
+yellow
+# Abstract
+justice
+freedom
+money
+war
+peace

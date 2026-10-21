@@ -1,0 +1,50 @@
+# Publishes the web UI (src/eigentoken/web) to GitHub Pages on every push to main.
+# One-time setup: repo Settings → Pages → Source: "GitHub Actions".
+# The site is then at https://<user>.github.io/<repo>/ (the page uses relative paths,
+# so it works at any sub-path). Pull requests are checked but not deployed.
+#
+# Pages hosts only the interface. The analyses run in a Python server, so the hosted
+# page talks to one given with ?api=URL, which must be started with
+# --cors-origin https://<user>.github.io.
+name: Web app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # The render tests need a live server with a model loaded, so CI only checks
+      # that the script parses.
+      - run: node --check src/eigentoken/web/app.js
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: src/eigentoken/web
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    # One deployment at a time; a newer push replaces a queued (not a running) one.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

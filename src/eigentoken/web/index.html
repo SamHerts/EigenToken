@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Read the geometry of an LLM's token embeddings: neighbourhoods, analogies, axes, bias tests and cross-model comparisons.">
+<!-- Where the API lives. Empty: this same origin, as when `eigentoken serve` serves the
+     page. A static copy (GitHub Pages) can point at a server here, or with ?api=URL. -->
+<meta name="eigentoken-api" content="">
+<title>EigenToken</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><img src="icon.svg" alt="" width="22" height="22">EigenToken<span class="tag">token embedding geometry</span></div>
+  <div class="health" id="health">connecting…</div>
+</header>
+
+<div class="layout">
+
+  <!-- ---------------------------------------------------------------- -->
+  <aside class="sidebar">
+    <section class="panel">
+      <h2>Models
+        <button class="mini" id="addModel" title="Add another model slot">+ add</button>
+      </h2>
+      <p class="hint">
+        Add the same model twice to compare it with itself — its input matrix
+        against its output matrix, or centered against raw.
+      </p>
+      <div id="specList"></div>
+      <datalist id="suggested"></datalist>
+    </section>
+
+    <section class="panel">
+      <h2>Defaults</h2>
+      <label class="row">
+        <span>Sub-word pooling</span>
+        <select id="pooling">
+          <option value="mean">mean</option>
+          <option value="norm-mean">norm-mean</option>
+          <option value="sum">sum</option>
+          <option value="first">first</option>
+          <option value="last">last</option>
+        </select>
+      </label>
+      <p class="hint">
+        Used only when a word is not a single token in that model's vocabulary.
+        Results are flagged when it happens.
+      </p>
+    </section>
+
+    <section class="panel" id="loadedPanel">
+      <h2>Resident <span class="mem" id="memUse"></span></h2>
+      <p class="hint">Shared by everyone using this server. The least recently
+        used are freed when room is needed.</p>
+      <div id="loadedList" class="loaded-list"></div>
+    </section>
+  </aside>
+
+  <!-- ---------------------------------------------------------------- -->
+  <main>
+    <section class="msg warn offline" id="offline" hidden>
+      <p><b>No EigenToken server is answering<span id="offlineAt"></span>.</b>
+        This page is only the interface; the embeddings are computed by a Python
+        server you run yourself. Start one that allows this page to call it:</p>
+      <pre id="offlineCmd">eigentoken serve --cors-origin ORIGIN</pre>
+      <p>then point this page at it:</p>
+      <form id="apiForm">
+        <input id="apiInput" placeholder="http://localhost:8077" spellcheck="false">
+        <button class="run" type="submit">Connect</button>
+      </form>
+    </section>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="cloud" class="active">Word cloud</button>
+      <button data-tab="compare">Compare</button>
+      <button data-tab="neighbors">Neighbours</button>
+      <button data-tab="analogy">Analogy</button>
+      <button data-tab="axis">Axis</button>
+      <button data-tab="bias">Bias</button>
+      <button data-tab="crossmodel">Cross-model</button>
+      <button data-tab="tokens">Tokens</button>
+    </nav>
+
+    <!-- ---------------- cloud ---------------- -->
+    <section class="tab active" id="tab-cloud">
+      <div class="controls">
+        <label><span>Token</span>
+          <input id="cloudWord" value="king" placeholder="king, or id:5822 / tok:Ġking">
+        </label>
+        <label><span>Model</span><select id="cloudSpec"></select></label>
+        <label><span>Neighbours <b id="cloudKLbl">120</b></span>
+          <input type="range" id="cloudK" min="10" max="400" step="10" value="120">
+        </label>
+        <label><span>Groups <b id="cloudCLbl">6</b></span>
+          <input type="range" id="cloudC" min="0" max="12" value="6">
+        </label>
+        <label><span>Layout</span>
+          <select id="cloudMode">
+            <option value="radial">radial (true distance)</option>
+            <option value="pca">plain PCA scatter</option>
+          </select>
+        </label>
+        <label class="check" title="Drop KING / King / ' King' etc. from the results">
+          <input type="checkbox" id="cloudExVar" checked>
+          <span>hide case/space variants</span></label>
+        <button class="run" id="runCloud">Draw cloud</button>
+      </div>
+      <p class="hint" id="cloudHint">
+        In the radial layout every point's <b>distance from the centre is its real
+        cosine distance</b> from the query token; only the angle comes from a 2D
+        projection, so nothing about the radius is distorted. Click any token to
+        recentre the cloud on it.
+        <br>A leading <b>␣</b> means the token includes the space before the
+        word &mdash; <code>␣water</code> is the form that appears mid-sentence,
+        <code>water</code> the one that appears after a prefix, as in
+        <code>fresh|water</code>. They are separate rows with separate geometry.
+      </p>
+      <div id="crumbs" class="crumbs"></div>
+      <div class="cloud-wrap">
+        <div class="cloud-stage">
+          <svg id="cloudSvg"></svg>
+          <div class="cloud-tools">
+            <button id="zoomIn" title="Zoom in">+</button>
+            <button id="zoomOut" title="Zoom out">−</button>
+            <button id="zoomReset" title="Reset view">⤢</button>
+          </div>
+          <div id="tip" class="tip hidden"></div>
+        </div>
+        <div class="cloud-side">
+          <div id="cloudLegend"></div>
+          <div id="cloudList"></div>
+        </div>
+      </div>
+      <div id="out-cloud" class="out"></div>
+    </section>
+
+    <!-- ---------------- compare ---------------- -->
+    <section class="tab" id="tab-compare">
+      <div class="controls">
+        <label class="wide"><span>Words (comma, space or newline separated)</span>
+          <textarea id="cmpWords" rows="2">king queen man woman</textarea>
+        </label>
+        <label><span>Dimension breakdown <b id="cmpDimsLbl">0</b></span>
+          <input type="range" id="cmpDims" min="0" max="25" value="0">
+        </label>
+        <button class="run" id="runCompare">Compare</button>
+      </div>
+      <div id="out-compare" class="out"></div>
+    </section>
+
+    <!-- ---------------- neighbours ---------------- -->
+    <section class="tab" id="tab-neighbors">
+      <div class="controls">
+        <label class="wide"><span>Words</span>
+          <textarea id="nbWords" rows="2">king queen</textarea>
+        </label>
+        <label><span>Top <b id="nbKLbl">20</b></span>
+          <input type="range" id="nbK" min="5" max="100" step="5" value="20">
+        </label>
+        <label><span>Metric</span>
+          <select id="nbMetric">
+            <option value="cosine">cosine</option>
+            <option value="dot">dot product</option>
+            <option value="euclidean">euclidean</option>
+          </select>
+        </label>
+        <label class="check" title="Drop KING / King / ' King' etc. from the results">
+          <input type="checkbox" id="nbExVar" checked>
+          <span>hide case/space variants</span></label>
+        <button class="run" id="runNeighbors">Find</button>
+      </div>
+      <div id="out-neighbors" class="out"></div>
+    </section>
+
+    <!-- ---------------- analogy ---------------- -->
+    <section class="tab" id="tab-analogy">
+      <div class="controls">
+        <label><span>a</span><input id="anA" value="man"></label>
+        <label><span>b</span><input id="anB" value="king"></label>
+        <label><span>c</span><input id="anC" value="woman"></label>
+        <label><span>expected (optional)</span><input id="anE" value="queen"></label>
+        <label><span>Top <b id="anKLbl">10</b></span>
+          <input type="range" id="anK" min="3" max="50" value="10">
+        </label>
+        <button class="run" id="runAnalogy">Solve</button>
+      </div>
+      <p class="hint">
+        <b>a : b :: c : ?</b> — the model computes b − a + c. With an expected
+        answer it also reports <b>offset parallelism</b>, which is the number
+        that matters: c is often already near the answer, so a correct top-1
+        can be luck.
+      </p>
+      <div id="out-analogy" class="out"></div>
+    </section>
+
+    <!-- ---------------- axis ---------------- -->
+    <section class="tab" id="tab-axis">
+      <div class="controls">
+        <label class="wide"><span>Defining pairs (one <code>from:to</code> per line)</span>
+          <textarea id="axPairs" rows="5">man:woman
+king:queen
+father:mother
+actor:actress
+brother:sister</textarea>
+        </label>
+        <label class="wide"><span>Probe words</span>
+          <textarea id="axProbes" rows="2">doctor nurse engineer teacher secretary programmer</textarea>
+        </label>
+        <label><span>Vocabulary extremes <b id="axExLbl">15</b></span>
+          <input type="range" id="axEx" min="0" max="50" step="5" value="15">
+        </label>
+        <button class="run" id="runAxis">Build axis</button>
+      </div>
+      <p class="hint">
+        Averages the offsets into a direction, then checks whether averaging was
+        legitimate. Low coherence means the contrast is not one linear direction
+        in that model and the projections below are noise.
+      </p>
+      <div id="out-axis" class="out"></div>
+    </section>
+
+    <!-- ---------------- bias ---------------- -->
+    <section class="tab" id="tab-bias">
+      <div class="controls">
+        <label><span>Preset</span><select id="biasPreset"></select></label>
+        <label><span>Permutations <b id="biasPermLbl">10000</b></span>
+          <input type="range" id="biasPerm" min="1000" max="20000" step="1000" value="10000">
+        </label>
+        <button class="run" id="runBias">Run test</button>
+      </div>
+      <div class="controls">
+        <label><span>Target X label</span><input id="biasXLabel" value="flowers"></label>
+        <label><span>Target Y label</span><input id="biasYLabel" value="insects"></label>
+        <label><span>Attribute A label</span><input id="biasALabel" value="pleasant"></label>
+        <label><span>Attribute B label</span><input id="biasBLabel" value="unpleasant"></label>
+      </div>
+      <div class="controls">
+        <label class="wide"><span>Target set X (words)</span>
+          <textarea id="biasX" rows="3">rose tulip daisy orchid lily daffodil iris violet peony carnation</textarea>
+        </label>
+        <label class="wide"><span>Target set Y (words)</span>
+          <textarea id="biasY" rows="3">ant spider wasp cockroach mosquito beetle tick maggot moth flea</textarea>
+        </label>
+      </div>
+      <div class="controls">
+        <label class="wide"><span>Attribute set A (words)</span>
+          <textarea id="biasA" rows="3">love peace freedom joy honest gentle friend paradise happy rainbow</textarea>
+        </label>
+        <label class="wide"><span>Attribute set B (words)</span>
+          <textarea id="biasB" rows="3">death hatred poison filth murder disease ugly vomit prison agony</textarea>
+        </label>
+      </div>
+      <p class="hint">
+        WEAT (Word Embedding Association Test): measures how much more strongly
+        the model associates target set X (vs. Y) with attribute set A (vs. B)
+        than chance predicts, from cosine similarity alone. <b>Effect size</b>
+        is Cohen's <i>d</i> (0.2 small, 0.5 medium, 0.8 large); <b>p-value</b>
+        is a Monte Carlo permutation-test estimate, not exact. These are small
+        word lists on one embedding matrix &mdash; illustrative, not a
+        rigorous audit. Edit the four lists above, or pick a different preset,
+        to run your own test.
+      </p>
+      <div id="out-bias" class="out"></div>
+    </section>
+
+    <!-- ---------------- crossmodel ---------------- -->
+    <section class="tab" id="tab-crossmodel">
+      <div class="controls">
+        <label class="wide"><span>Words (four or more)</span>
+          <textarea id="xmWords" rows="4">king queen man woman prince princess
+france paris japan tokyo germany berlin
+dog cat horse lion mouse
+one two three seven red blue green
+justice freedom money war peace</textarea>
+        </label>
+        <label><span>Neighbour overlap k <b id="xmNbLbl">10</b></span>
+          <input type="range" id="xmNb" min="0" max="30" step="5" value="10">
+        </label>
+        <label class="check"><input type="checkbox" id="xmSingle" checked>
+          <span>single-token words only</span></label>
+        <button class="run" id="runCross">Compare models</button>
+      </div>
+      <p class="hint">
+        Coordinates are not comparable across models, so this compares the
+        <i>shape</i> of the relationships instead: RSA correlates each model's
+        internal word × word similarity matrix, Procrustes measures the residual
+        after the best rotation.
+      </p>
+      <div id="out-crossmodel" class="out"></div>
+    </section>
+
+    <!-- ---------------- tokens ---------------- -->
+    <section class="tab" id="tab-tokens">
+      <div class="controls">
+        <label><span>Model</span><select id="tkSpec"></select></label>
+        <label class="wide"><span>Words</span>
+          <textarea id="tkWords" rows="2">king queen antidisestablishmentarianism</textarea>
+        </label>
+        <button class="run" id="runTokens">Inspect</button>
+      </div>
+      <p class="hint">
+        How each word enters the model. Words with no single-token form are
+        pooled across sub-words, and their geometry is only approximate.
+      </p>
+      <div id="out-tokens" class="out"></div>
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
